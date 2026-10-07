@@ -1,0 +1,52 @@
+# Registers the Telegram webhook so the bot's /add, /list, /del commands reach
+# your Cloudflare Worker. Run from the Actions tab.
+#
+# This exists because api.telegram.org is blocked on the author's ISP, so the
+# usual one-line curl cannot be run locally. GitHub's runners can reach it.
+name: Register Telegram webhook
+
+on:
+  workflow_dispatch:
+    inputs:
+      worker_url:
+        description: "Worker URL, e.g. https://gold-alerts.yourname.workers.dev"
+        required: true
+      action:
+        description: "set or delete or info"
+        type: choice
+        options: [set, info, delete]
+        default: set
+
+jobs:
+  webhook:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call Telegram setWebhook
+        env:
+          TOKEN:  ${{ secrets.TELEGRAM_TOKEN }}
+          SECRET: ${{ secrets.WEBHOOK_SECRET }}
+          URL:    ${{ inputs.worker_url }}
+          ACTION: ${{ inputs.action }}
+        run: |
+          set -euo pipefail
+          api="https://api.telegram.org/bot$TOKEN"
+          case "$ACTION" in
+            set)
+              if [ -z "${SECRET:-}" ]; then
+                echo "::error::WEBHOOK_SECRET repo secret is not set"; exit 1
+              fi
+              resp=$(curl -sS -X POST "$api/setWebhook" \
+                -H 'Content-Type: application/json' \
+                -d "{\"url\":\"$URL\",\"secret_token\":\"$SECRET\",\"allowed_updates\":[\"message\"]}")
+              ;;
+            delete) resp=$(curl -sS "$api/deleteWebhook") ;;
+            info)   resp=$(curl -sS "$api/getWebhookInfo") ;;
+          esac
+          echo "$resp"
+          {
+            echo "## Telegram webhook — \`$ACTION\`"
+            echo '```json'
+            echo "$resp"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "$resp" | grep -q '"ok":true' || { echo "::error::Telegram rejected the call"; exit 1; }
