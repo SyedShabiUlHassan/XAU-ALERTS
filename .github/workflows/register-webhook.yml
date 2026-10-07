@@ -35,6 +35,25 @@ jobs:
               if [ -z "${SECRET:-}" ]; then
                 echo "::error::WEBHOOK_SECRET repo secret is not set"; exit 1
               fi
+              # Telegram only accepts A-Z a-z 0-9 _ - in secret_token, and a
+              # pasted secret often carries a trailing newline. Trim, then check.
+              SECRET=$(printf '%s' "$SECRET" | tr -d '[:space:]')
+              if ! printf '%s' "$SECRET" | grep -qE '^[A-Za-z0-9_-]{1,256}$'; then
+                bad=$(printf '%s' "$SECRET" | tr -d 'A-Za-z0-9_-')
+                {
+                  echo "## Webhook secret rejected"
+                  echo "Telegram allows only \`A-Z a-z 0-9 _ -\` in the secret token."
+                  echo ""
+                  echo "- length after trimming: ${#SECRET}"
+                  echo "- disallowed characters present: \`$(printf '%s' "$bad" | head -c 40)\`"
+                  echo ""
+                  echo "Pick a plain value like \`gold7x9k2mq4pz\` and set it in **both**"
+                  echo "places: \`npx wrangler secret put WEBHOOK_SECRET\` and this repo's"
+                  echo "\`WEBHOOK_SECRET\` secret. They must match exactly."
+                } >> "$GITHUB_STEP_SUMMARY"
+                echo "::error::WEBHOOK_SECRET contains characters Telegram does not allow"
+                exit 1
+              fi
               resp=$(curl -sS -X POST "$api/setWebhook" \
                 -H 'Content-Type: application/json' \
                 -d "{\"url\":\"$URL\",\"secret_token\":\"$SECRET\",\"allowed_updates\":[\"message\"]}")
