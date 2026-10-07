@@ -69,9 +69,10 @@ def diagnose():
     summary(f"- TELEGRAM_CHAT_ID: {'`' + chat + '`' if chat else '**MISSING**'}")
 
     ok, res = tg_api("getMe")
+    bot_user = None
     if ok:
-        summary(f"- getMe: **OK** - bot is `@{res['result'].get('username')}` "
-                f"(token is valid)")
+        bot_user = res["result"].get("username")
+        summary(f"- getMe: **OK** - bot is `@{bot_user}` (token is valid)")
     else:
         summary(f"- getMe: **FAILED** - `{res}`")
         summary("\n**Diagnosis: your bot token is invalid or revoked.** "
@@ -86,9 +87,9 @@ def diagnose():
         summary(f"- getChat: **FAILED** - `{res}`")
         desc = str(res).lower()
         if "not found" in desc or "initiate" in desc or "blocked" in desc:
-            summary("\n**Diagnosis: the bot has never spoken to you.** "
-                    "Open https://t.me/" + str(res.get("username", "your bot")) +
-                    " in Telegram and press **START**, then re-run.")
+            summary(f"\n**Diagnosis: you have never opened a chat with the bot.** "
+                    f"Telegram does not let a bot message you first. Open "
+                    f"https://t.me/{bot_user} in Telegram, press **START**, then re-run.")
         else:
             summary(f"\n**Diagnosis: TELEGRAM_CHAT_ID `{chat}` is wrong.** "
                     "Get the right number from @userinfobot.")
