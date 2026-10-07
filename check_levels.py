@@ -41,7 +41,7 @@ def summary(md):
 
 def tg_api(method, payload=None):
     """Call a Telegram Bot API method; return (ok, parsed_response_or_error_text)."""
-    tok = os.environ.get("TELEGRAM_TOKEN", "")
+    tok = os.environ.get("TELEGRAM_TOKEN", "").strip()
     if not tok:
         return False, "TELEGRAM_TOKEN secret is empty or missing"
     url = f"https://api.telegram.org/bot{tok}/{method}"
@@ -80,11 +80,43 @@ def diagnose():
                 "and update the `TELEGRAM_TOKEN` secret.")
         return False
 
+    raw = os.environ.get("TELEGRAM_CHAT_ID", "")
+    if raw != raw.strip():
+        summary(f"- note: chat id had surrounding whitespace ({len(raw)} chars "
+                f"vs {len(raw.strip())} trimmed) - now stripped")
+
     ok, res = tg_api("getChat", {"chat_id": chat})
     if ok:
         summary(f"- getChat: **OK** - chat reachable")
     else:
         summary(f"- getChat: **FAILED** - `{res}`")
+
+        # Find out which chat ids this bot has genuinely received messages from.
+        ok2, upd = tg_api("getUpdates")
+        seen = []
+        if ok2:
+            for u in upd.get("result", []):
+                m = u.get("message") or u.get("edited_message") or {}
+                c = m.get("chat") or {}
+                if c.get("id") and c["id"] not in seen:
+                    seen.append(c["id"])
+        if seen:
+            def mask(i):
+                t = str(i)
+                return t[:2] + "*" * max(0, len(t) - 6) + t[-4:]
+            summary(f"- the bot has actually received messages from: "
+                    + ", ".join(f"`{mask(i)}` ({len(str(i))} digits)" for i in seen))
+            summary(f"- your configured chat id: `{mask(chat)}` ({len(chat)} digits)")
+            if str(seen[0]) != str(chat):
+                summary(f"\n**Diagnosis: TELEGRAM_CHAT_ID does not match.** The bot is "
+                        f"talking to a different id than the one in your secret. "
+                        f"Re-copy your id from @userinfobot and update the secret.")
+                return False
+        else:
+            summary("- getUpdates shows no messages - the bot has not been messaged "
+                    "from this account, or the messages are older than 24h "
+                    "(send it another `hi` and re-run)")
+
         desc = str(res).lower()
         if "not found" in desc or "initiate" in desc or "blocked" in desc:
             summary(f"\n**Diagnosis: you have never opened a chat with the bot.** "
@@ -116,7 +148,8 @@ def level_id(lv):
 
 def notify(text):
     sent = False
-    tok, chat = os.environ.get("TELEGRAM_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID")
+    tok = os.environ.get("TELEGRAM_TOKEN", "").strip()
+    chat = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
     if tok and chat:
         try:
             body = json.dumps({"chat_id": chat, "text": text,
