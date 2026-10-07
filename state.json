@@ -1,1 +1,6 @@
-{"fired": {}, "last_candle": {}}
+{
+  "fired": {},
+  "last_candle": {
+    "1h": 1791396000
+  }
+}
