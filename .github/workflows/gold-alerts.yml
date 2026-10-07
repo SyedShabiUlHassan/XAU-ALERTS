@@ -1,0 +1,56 @@
+name: Gold level alerts
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"      # every 5 minutes (GitHub's minimum; often runs late)
+  workflow_dispatch:            # lets you run it by hand from the Actions tab
+    inputs:
+      test_notify:
+        description: "Send a test notification instead of checking levels"
+        type: boolean
+        default: false
+
+concurrency:
+  group: gold-alerts            # never let two runs overlap and double-fire
+  cancel-in-progress: false
+
+permissions:
+  contents: write               # needed to commit state.json back
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install -r requirements.txt
+
+      - name: Check levels
+        env:
+          TELEGRAM_TOKEN:   ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          DISCORD_WEBHOOK:  ${{ secrets.DISCORD_WEBHOOK }}
+          TWELVEDATA_KEY:   ${{ secrets.TWELVEDATA_KEY }}
+        run: |
+          if [ "${{ inputs.test_notify }}" = "true" ]; then
+            python check_levels.py --test-notify
+          else
+            python check_levels.py
+          fi
+
+      - name: Persist fired levels
+        run: |
+          if ! git diff --quiet state.json; then
+            git config user.name  "gold-alerts-bot"
+            git config user.email "actions@github.com"
+            git add state.json
+            git commit -m "chore: level fired [skip ci]"
+            git push
+          else
+            echo "no state change"
+          fi
