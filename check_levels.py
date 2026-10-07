@@ -23,8 +23,10 @@ from feeds import TF_SECONDS, get_candles
 HERE = Path(__file__).parent
 CONFIG = HERE / "config.yaml"
 STATE = HERE / "state.json"
-# Accept a candle that closed within this long ago. Generous because GitHub's
-# scheduler is frequently 5-15 minutes late.
+# A candle is stale only if a NEWER one should have closed by now and hasn't
+# (i.e. the market is shut). The allowance therefore scales with the timeframe:
+# a daily candle stays current for a day, a 1h candle for an hour. The extra
+# slack absorbs GitHub's 5-15 minute scheduling lag.
 STALE_SLACK = 45 * 60
 
 
@@ -103,7 +105,7 @@ def check(levels, state, now):
 
         prev_c, last_c = closed[-2], closed[-1]
         age = now - (last_c["epoch"] + secs)
-        if age > STALE_SLACK:
+        if age > secs + STALE_SLACK:
             ended = datetime.fromtimestamp(last_c["epoch"] + secs, timezone.utc)
             print(f"[{tf}] stale via {src} (last close {ended:%Y-%m-%d %H:%M} UTC) "
                   f"- market closed, skipping")

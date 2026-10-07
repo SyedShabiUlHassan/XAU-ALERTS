@@ -36,10 +36,14 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           DISCORD_WEBHOOK:  ${{ secrets.DISCORD_WEBHOOK }}
           TWELVEDATA_KEY:   ${{ secrets.TWELVEDATA_KEY }}
+          TEST_NOTIFY:      ${{ github.event.inputs.test_notify }}
         run: |
-          if [ "${{ inputs.test_notify }}" = "true" ]; then
+          echo "test_notify input = '$TEST_NOTIFY'"
+          if [ "$TEST_NOTIFY" = "true" ]; then
+            echo "--> running in TEST NOTIFICATION mode"
             python check_levels.py --test-notify
           else
+            echo "--> running normal level check"
             python check_levels.py
           fi
 
