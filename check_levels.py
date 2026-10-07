@@ -12,7 +12,7 @@ Secrets come from the environment, never from config.yaml:
 """
 from __future__ import annotations
 
-import hashlib, json, os, sys, time, urllib.request
+import hashlib, json, os, sys, time, urllib.error, urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -56,8 +56,10 @@ def notify(text):
                                          data=body, headers={"Content-Type": "application/json"})
             urllib.request.urlopen(req, timeout=20).read()
             sent = True
+        except urllib.error.HTTPError as e:
+            print(f"  !! telegram HTTP {e.code}: {e.read().decode()[:300]}", file=sys.stderr)
         except Exception as e:
-            print(f"  !! telegram failed: {e}", file=sys.stderr)
+            print(f"  !! telegram failed: {type(e).__name__}: {e}", file=sys.stderr)
 
     hook = os.environ.get("DISCORD_WEBHOOK")
     if hook:
@@ -133,7 +135,8 @@ def check(levels, state, now):
                     f"Closed at : {closed_at:%Y-%m-%d %H:%M} UTC\n"
                     f'Level : "{lv["label"]}"')
             print(f"  TRIGGER {lv['label']}")
-            notify(text)
+            if not notify(text):
+                raise SystemExit(f"ALERT UNDELIVERED for {lv['label']} - not marking as fired")
             state["fired"][lid] = {
                 "label": lv["label"], "price": L, "timeframe": tf, "side": side,
                 "close": round(c, 3), "candle_epoch": last_c["epoch"],
@@ -151,6 +154,10 @@ def main():
     state = load_state()
     now = time.time()
 
+    tok = os.environ.get("TELEGRAM_TOKEN", "")
+    print(f"telegram token: {'set (' + str(len(tok)) + ' chars)' if tok else 'MISSING'}  "
+          f"chat id: {'set' if os.environ.get('TELEGRAM_CHAT_ID') else 'MISSING'}  "
+          f"twelvedata key: {'set' if os.environ.get('TWELVEDATA_KEY') else 'MISSING'}")
     armed = [lv for lv in levels if level_id(lv) not in state["fired"]]
     print(f"{datetime.now(timezone.utc):%Y-%m-%d %H:%M} UTC  "
           f"{len(armed)} armed / {len(levels)} total")
@@ -160,7 +167,10 @@ def main():
               f"{lv.get('direction','both')}")
 
     if "--test-notify" in sys.argv:
-        notify("🔔 Test from GitHub Actions — gold alerts are wired up correctly.")
+        print("Sending test notification...")
+        if not notify("🔔 Test from GitHub Actions — gold alerts are wired up correctly."):
+            sys.exit("TEST FAILED: notification was not delivered (see errors above)")
+        print("Test notification delivered OK.")
         return
 
     if armed and check(armed, state, now):
