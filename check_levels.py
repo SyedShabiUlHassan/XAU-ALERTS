@@ -63,8 +63,8 @@ def tg_api(method, payload=None):
 def diagnose():
     """Check token and chat reachability, and report what is actually wrong."""
     summary("## Telegram diagnostics\n")
-    tok = os.environ.get("TELEGRAM_TOKEN", "")
-    chat = os.environ.get("TELEGRAM_CHAT_ID", "")
+    tok = os.environ.get("TELEGRAM_TOKEN", "").strip()
+    chat = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
     summary(f"- TELEGRAM_TOKEN: {'set, ' + str(len(tok)) + ' chars' if tok else '**MISSING**'}")
     summary(f"- TELEGRAM_CHAT_ID: {'`' + chat + '`' if chat else '**MISSING**'}")
 
