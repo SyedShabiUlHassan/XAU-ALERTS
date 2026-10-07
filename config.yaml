@@ -7,18 +7,7 @@
 # Each level fires ONCE then disables itself (recorded in state.json).
 # Re-arm by changing its price or label, then commit.
 
-levels:
-  - label: "1H resistance"
-    price: 4400.0
-    timeframe: 1h
-    direction: both
-
-  - label: "Daily support"
-    price: 4250.0
-    timeframe: 1d
-    direction: below
-
-  - label: "4H swing high"
-    price: 4420.0
-    timeframe: 4h
-    direction: above
+levels: []
+# Retired - levels now live in Cloudflare KV and are managed by messaging the
+# bot (/add, /list, /del). Nothing here is used unless this workflow is
+# re-enabled and the cron uncommented.

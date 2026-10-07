@@ -1,8 +1,12 @@
 name: Gold level alerts
 
+# RETIRED - superseded by the Cloudflare Worker (gold-alerts.shabihassan951.workers.dev),
+# which runs every minute and therefore also handles 3m candles. The schedule below
+# is commented out so this no longer fires on its own; it can still be run by hand
+# from the Actions tab, and re-enabled by uncommenting the two cron lines.
 on:
-  schedule:
-    - cron: "*/5 * * * *"      # every 5 minutes (GitHub's minimum; often runs late)
+  # schedule:
+  #   - cron: "*/5 * * * *"
   workflow_dispatch:            # lets you run it by hand from the Actions tab
     inputs:
       test_notify:
