@@ -30,6 +30,72 @@ STATE = HERE / "state.json"
 STALE_SLACK = 45 * 60
 
 
+def summary(md):
+    """Append markdown to the GitHub Actions run summary (visible on the run page)."""
+    path = os.environ.get("GITHUB_STEP_SUMMARY")
+    if path:
+        with open(path, "a") as f:
+            f.write(md + "\n")
+    print(md.replace("**", ""))
+
+
+def tg_api(method, payload=None):
+    """Call a Telegram Bot API method; return (ok, parsed_response_or_error_text)."""
+    tok = os.environ.get("TELEGRAM_TOKEN", "")
+    if not tok:
+        return False, "TELEGRAM_TOKEN secret is empty or missing"
+    url = f"https://api.telegram.org/bot{tok}/{method}"
+    data = json.dumps(payload).encode() if payload else None
+    req = urllib.request.Request(url, data=data,
+                                 headers={"Content-Type": "application/json"} if data else {})
+    try:
+        with urllib.request.urlopen(req, timeout=20) as r:
+            return True, json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        try:
+            return False, json.loads(e.read())
+        except Exception:
+            return False, f"HTTP {e.code}"
+    except Exception as e:
+        return False, f"{type(e).__name__}: {e}"
+
+
+def diagnose():
+    """Check token and chat reachability, and report what is actually wrong."""
+    summary("## Telegram diagnostics\n")
+    tok = os.environ.get("TELEGRAM_TOKEN", "")
+    chat = os.environ.get("TELEGRAM_CHAT_ID", "")
+    summary(f"- TELEGRAM_TOKEN: {'set, ' + str(len(tok)) + ' chars' if tok else '**MISSING**'}")
+    summary(f"- TELEGRAM_CHAT_ID: {'`' + chat + '`' if chat else '**MISSING**'}")
+
+    ok, res = tg_api("getMe")
+    if ok:
+        summary(f"- getMe: **OK** - bot is `@{res['result'].get('username')}` "
+                f"(token is valid)")
+    else:
+        summary(f"- getMe: **FAILED** - `{res}`")
+        summary("\n**Diagnosis: your bot token is invalid or revoked.** "
+                "Get a fresh one from @BotFather (`/mybots` -> your bot -> API Token) "
+                "and update the `TELEGRAM_TOKEN` secret.")
+        return False
+
+    ok, res = tg_api("getChat", {"chat_id": chat})
+    if ok:
+        summary(f"- getChat: **OK** - chat reachable")
+    else:
+        summary(f"- getChat: **FAILED** - `{res}`")
+        desc = str(res).lower()
+        if "not found" in desc or "initiate" in desc or "blocked" in desc:
+            summary("\n**Diagnosis: the bot has never spoken to you.** "
+                    "Open https://t.me/" + str(res.get("username", "your bot")) +
+                    " in Telegram and press **START**, then re-run.")
+        else:
+            summary(f"\n**Diagnosis: TELEGRAM_CHAT_ID `{chat}` is wrong.** "
+                    "Get the right number from @userinfobot.")
+        return False
+    return True
+
+
 def load_state():
     if STATE.exists():
         try:
@@ -169,10 +235,12 @@ def main():
               f"{lv.get('direction','both')}")
 
     if "--test-notify" in sys.argv:
-        print("Sending test notification...")
+        if not diagnose():
+            sys.exit(1)
         if not notify("🔔 Test from GitHub Actions — gold alerts are wired up correctly."):
-            sys.exit("TEST FAILED: notification was not delivered (see errors above)")
-        print("Test notification delivered OK.")
+            summary("\n- sendMessage: **FAILED** (see log)")
+            sys.exit(1)
+        summary("\n- sendMessage: **OK** - check your phone ✅")
         return
 
     if armed and check(armed, state, now):
